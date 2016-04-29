@@ -154,3 +154,5 @@ deploy:
         (-n "$PROJECT_VERSION") &&
         (-n "$PLATFORM") &&
         ("${CHANNEL:-stable}"=stable)
+      # TODO: remove this
+      all_branches: true
