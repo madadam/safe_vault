@@ -132,19 +132,19 @@ before_deploy:
   - ./ci/travis/before_deploy.sh
 
 deploy:
-  - provider: releases
-    api_key: ${GH_TOKEN}
-    file: ${PROJECT_NAME}-v${PROJECT_VERSION}-${PLATFORM}.tar.gz
-    skip_cleanup: true
-    draft: true
-    tag_name: ${PROJECT_VERSION}
-    on:
-      # Deploy only on version bump commits (must contain "Version change to x.y.z"
-      # in the commit message), and only for stable rust.
-      condition: (-n "$PROJECT_VERSION") && (-n "$PLATFORM") && ("${CHANNEL:-stable}"=stable)
+  # - provider: releases
+  #   api_key: ${GH_TOKEN}
+  #   file: ${PROJECT_NAME}-v${PROJECT_VERSION}-${PLATFORM}.tar.gz
+  #   skip_cleanup: true
+  #   draft: true
+  #   tag_name: ${PROJECT_VERSION}
+  #   on:
+  #     # Deploy only on version bump commits (must contain "Version change to x.y.z"
+  #     # in the commit message), and only for stable rust.
+  #     condition: (-n "$PROJECT_VERSION") && (-n "$PLATFORM") && ("${CHANNEL:-stable}"=stable)
 
-      # TODO: remove this
-      all_branches: true
+  #     # TODO: remove this
+  #     all_branches: true
   - provider: script
     script: ./ci/travis/deploy_docker_image.sh
     skip_cleanup: true
