@@ -53,7 +53,9 @@ matrix:
         ONLY_DEPLOY=1
         DOCKER_IMAGE=madadam/vault
       # TODO: uncommend once https://github.com/travis-ci/apt-package-whitelist/issues/369 is resolved
-      # sudo: required
+      sudo: required
+      services:
+        - docker
       # addons:
       #   apt:
       #     packages:
