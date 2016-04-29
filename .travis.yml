@@ -25,30 +25,33 @@ env:
 
 matrix:
   include:
-    - os: linux
-      env: >
-        TARGET=x86_64-unknown-linux-gnu
-        PLATFORM=linux-x64
-        FEATURES=use-mock-crust
+    # TODO: uncomment these
+    # - os: linux
+    #   env: >
+    #     TARGET=x86_64-unknown-linux-gnu
+    #     PLATFORM=linux-x64
+    #     FEATURES=use-mock-crust
+
+    # - os: linux
+    #   env: >
+    #     TARGET=i686-unknown-linux-gnu
+    #     PLATFORM=linux-x86
+    #     FEATURES=use-mock-crust
+    #     ONLY_DEPLOY=1
+    #   sudo: required
+    #   addons:
+    #     apt:
+    #       packages:
+    #         - gcc-multilib
 
     - os: linux
-      env: >
-        TARGET=i686-unknown-linux-gnu
-        PLATFORM=linux-x86
-        FEATURES=use-mock-crust
-        ONLY_DEPLOY=1
-      sudo: required
-      addons:
-        apt:
-          packages:
-            - gcc-multilib
-
-    - os: linux
+      # TODO: change docker image to msafe/vault
       env: >
         TARGET=x86_64-unknown-linux-musl
         PLATFORM=linux-musl-x64
         FEATURES=use-mock-crust
         ONLY_DEPLOY=1
+        DOCKER_IMAGE=madadam/vault
       # TODO: uncommend once https://github.com/travis-ci/apt-package-whitelist/issues/369 is resolved
       # sudo: required
       # addons:
@@ -56,38 +59,39 @@ matrix:
       #     packages:
       #       - musl-tools
 
-    - os: linux
-      env: >
-        TARGET=armv7-unknown-linux-gnueabihf
-        PLATFORM=armv7
-        FEATURES=use-mock-crust
-        ONLY_DEPLOY=1
-      sudo: required
-      addons:
-        apt:
-          packages:
-            # Cross compiler and cross compiled C libraries
-            - gcc-arm-linux-gnueabihf
-            - libc6-armhf-cross
-            - libc6-dev-armhf-cross
+    # TODO: uncomment these
+    # - os: linux
+    #   env: >
+    #     TARGET=armv7-unknown-linux-gnueabihf
+    #     PLATFORM=armv7
+    #     FEATURES=use-mock-crust
+    #     ONLY_DEPLOY=1
+    #   sudo: required
+    #   addons:
+    #     apt:
+    #       packages:
+    #         # Cross compiler and cross compiled C libraries
+    #         - gcc-arm-linux-gnueabihf
+    #         - libc6-armhf-cross
+    #         - libc6-dev-armhf-cross
 
-    - os: linux
-      env: >
-        CHANNEL=nightly
-        FEATURES="clippy use-mock-crust"
-      allow_failures: true
+    # - os: linux
+    #   env: >
+    #     CHANNEL=nightly
+    #     FEATURES="clippy use-mock-crust"
+    #   allow_failures: true
 
-    - os: osx
-      env: >
-        TARGET=x86_64-apple-darwin
-        PLATFORM=osx-x64
-        FEATURES=use-mock-crust
+    # - os: osx
+    #   env: >
+    #     TARGET=x86_64-apple-darwin
+    #     PLATFORM=osx-x64
+    #     FEATURES=use-mock-crust
 
-    - os: osx
-      env: >
-        CHANNEL=nightly
-        FEATURES="clippy use-mock-crust"
-      allow_failures: true
+    # - os: osx
+    #   env: >
+    #     CHANNEL=nightly
+    #     FEATURES="clippy use-mock-crust"
+    #   allow_failures: true
 
   # Add "allow_failures: true" to rows which are allowed to fail without making
   # the whole build fail. This is useful for nightly builds.
@@ -100,7 +104,7 @@ branches:
   only:
     # TODO: change to master once done testing
     # - master
-    - more-platforms
+    - docker-alpine
 
 cache:
   directories:
@@ -128,16 +132,25 @@ before_deploy:
   - ./ci/travis/before_deploy.sh
 
 deploy:
-  provider: releases
-  api_key: ${GH_TOKEN}
-  file: ${PROJECT_NAME}-v${PROJECT_VERSION}-${PLATFORM}.tar.gz
-  skip_cleanup: true
-  draft: true
-  tag_name: ${PROJECT_VERSION}
-  on:
-    # Deploy only on version bump commits (must contain "Version change to x.y.z"
-    # in the commit message), and only for stable rust.
-    condition: (-n "$PROJECT_VERSION") && (-n "$PLATFORM") && ("${CHANNEL:-stable}"=stable)
+  - provider: releases
+    api_key: ${GH_TOKEN}
+    file: ${PROJECT_NAME}-v${PROJECT_VERSION}-${PLATFORM}.tar.gz
+    skip_cleanup: true
+    draft: true
+    tag_name: ${PROJECT_VERSION}
+    on:
+      # Deploy only on version bump commits (must contain "Version change to x.y.z"
+      # in the commit message), and only for stable rust.
+      condition: (-n "$PROJECT_VERSION") && (-n "$PLATFORM") && ("${CHANNEL:-stable}"=stable)
 
-    # TODO: remove this
-    all_branches: true
+      # TODO: remove this
+      all_branches: true
+  - provider: script
+    script: ./ci/travis/deploy_docker_image.sh
+    skip_cleanup: true
+    on:
+      condition: >
+        (-n "$DOCKER_IMAGE") &&
+        (-n "$PROJECT_VERSION") &&
+        (-n "$PLATFORM") &&
+        ("${CHANNEL:-stable}"=stable)
