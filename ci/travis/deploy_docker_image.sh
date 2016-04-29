@@ -5,7 +5,7 @@ set -ev
 export RUST_BACKTRACE=1
 cargo build --target $TARGET --release
 
-docker login -u="$DOCKER_USERNAME" -p="$DOCKER_PASSWORD"
+docker login -e="$DOCKER_EMAIL" -u="$DOCKER_USERNAME" -p="$DOCKER_PASSWORD"
 
 BUILD_DIR=installer/docker
 
