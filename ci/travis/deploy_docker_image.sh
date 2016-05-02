@@ -2,9 +2,6 @@
 
 set -ev
 
-export RUST_BACKTRACE=1
-cargo build --target $TARGET --release
-
 docker login -e="$DOCKER_EMAIL" -u="$DOCKER_USERNAME" -p="$DOCKER_PASSWORD"
 
 BUILD_DIR=installer/docker
@@ -18,3 +15,4 @@ docker tag $DOCKER_IMAGE:$PROJECT_VERSION $DOCKER_IMAGE:latest
 popd
 
 docker push $DOCKER_IMAGE:$PROJECT_VERSION
+docker push $DOCKER_IMAGE:latest
