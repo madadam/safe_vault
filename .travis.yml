@@ -155,6 +155,9 @@ deploy:
     on:
       condition: >
         (-n "$DOCKER_IMAGE") &&
+        (-n "$DOCKER_EMAIL") &&
+        (-n "$DOCKER_USERNAME") &&
+        (-n "$DOCKER_PASSWORD") &&
         (-n "$PROJECT_VERSION") &&
         (-n "$PLATFORM") &&
         ("${CHANNEL:-stable}"=stable)
