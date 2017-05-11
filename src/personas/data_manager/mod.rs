@@ -234,7 +234,7 @@ impl DataManager {
         if !success {
             if let Some(group) = routing_node.close_group(*data_id.name(), GROUP_SIZE) {
                 for node in &group {
-                    let _ = self.cache
+                    self.cache
                         .register_needed_data_with_another_holder(&data_id, *node);
                 }
 
