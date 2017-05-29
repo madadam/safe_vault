@@ -16,7 +16,6 @@
 // relating to use of the SAFE Network Software.
 
 use super::*;
-use super::ACCUMULATOR_QUORUM as QUORUM;
 use maidsafe_utilities::serialisation::{deserialise, serialise};
 use mock_routing::RequestWrapper;
 use rand::{self, Rng};
@@ -363,10 +362,7 @@ fn idata_with_churn() {
 
     // New node receives the refresh from at least QUORUM other nodes. The message
     // should now accumulate.
-    for name in old_node_names
-            .iter()
-            .skip(1)
-            .take(ACCUMULATOR_QUORUM - 1) {
+    for name in old_node_names.iter().skip(1).take(QUORUM - 1) {
         unwrap!(new_dm.handle_refresh(&mut new_node, *name, &refresh_payload));
     }
 

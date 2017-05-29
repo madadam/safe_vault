@@ -16,111 +16,69 @@
 // relating to use of the SAFE Network Software.
 
 use routing::AccountInfo;
-use routing::ClientError;
 use rust_sodium::crypto::sign;
 use std::collections::BTreeSet;
 
-/// Default available number of mutations per account.
+/// Default available number of operations per account.
 #[cfg(not(feature = "use-mock-crust"))]
-pub const DEFAULT_ACCOUNT_SIZE: u64 = 500;
+pub const DEFAULT_MAX_OPS_COUNT: u64 = 500;
 /// Default available number of mutations per account.
 #[cfg(feature = "use-mock-crust")]
-pub const DEFAULT_ACCOUNT_SIZE: u64 = 100;
+pub const DEFAULT_MAX_OPS_COUNT: u64 = 100;
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 pub struct Account {
-    pub info: AccountInfo,
-    pub auth_keys: BTreeSet<sign::PublicKey>,
-    pub version: u64,
+    /// Number of data operations performed by this account.
+    pub data_ops_count: u64,
+    /// Number of keys operations performed by this account.
+    pub keys_ops_count: u64,
+    /// App authentication keys.
+    pub keys: BTreeSet<sign::PublicKey>,
 }
 
 impl Account {
-    pub fn increment_mutation_counter(&mut self) -> Result<(), ClientError> {
-        if self.info.mutations_available < 1 {
-            return Err(ClientError::LowBalance);
+    // TODO: Change the `AccountInfo` struct in routing.
+    pub fn balance(&self) -> AccountInfo {
+        let done = self.data_ops_count + self.keys_ops_count;
+        let available = DEFAULT_MAX_OPS_COUNT.saturating_sub(done);
+
+        AccountInfo {
+            mutations_done: done,
+            mutations_available: available,
         }
-
-        self.info.mutations_done += 1;
-        self.info.mutations_available -= 1;
-        self.version += 1;
-
-        Ok(())
     }
 
-    pub fn decrement_mutation_counter(&mut self) -> Result<(), ClientError> {
-        if self.info.mutations_done < 1 {
-            return Err(ClientError::InvalidOperation);
-        }
-
-        self.info.mutations_done -= 1;
-        self.info.mutations_available += 1;
-        self.version += 1;
-
-        Ok(())
+    pub fn has_balance(&self) -> bool {
+        self.data_ops_count + self.keys_ops_count < DEFAULT_MAX_OPS_COUNT
     }
 }
 
 impl Default for Account {
     fn default() -> Self {
         Account {
-            info: AccountInfo {
-                mutations_available: DEFAULT_ACCOUNT_SIZE,
-                mutations_done: 0,
-            },
-            auth_keys: BTreeSet::new(),
-            version: 0,
+            data_ops_count: 0,
+            keys_ops_count: 0,
+            keys: BTreeSet::new(),
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Account, DEFAULT_ACCOUNT_SIZE};
+    use super::{Account, DEFAULT_MAX_OPS_COUNT};
 
     #[test]
-    fn normal_updates() {
+    fn balance() {
         let mut account = Account::default();
+        assert!(account.has_balance());
 
-        assert_eq!(0, account.info.mutations_done);
-        assert_eq!(DEFAULT_ACCOUNT_SIZE, account.info.mutations_available);
-        for _ in 0..DEFAULT_ACCOUNT_SIZE {
-            assert!(account.increment_mutation_counter().is_ok());
-        }
-        assert_eq!(DEFAULT_ACCOUNT_SIZE, account.info.mutations_done);
-        assert_eq!(0, account.info.mutations_available);
+        account.data_ops_count = DEFAULT_MAX_OPS_COUNT - 2;
+        assert!(account.has_balance());
 
-        for _ in 0..DEFAULT_ACCOUNT_SIZE {
-            assert!(account.decrement_mutation_counter().is_ok());
-        }
-        assert_eq!(0, account.info.mutations_done);
-        assert_eq!(DEFAULT_ACCOUNT_SIZE, account.info.mutations_available);
-    }
+        account.keys_ops_count = 1;
+        assert!(account.has_balance());
 
-    #[test]
-    fn error_updates() {
-        let mut account = Account::default();
-
-        assert_eq!(0, account.info.mutations_done);
-        assert_eq!(DEFAULT_ACCOUNT_SIZE, account.info.mutations_available);
-        for _ in 0..DEFAULT_ACCOUNT_SIZE {
-            assert!(account.increment_mutation_counter().is_ok());
-        }
-        assert_eq!(DEFAULT_ACCOUNT_SIZE, account.info.mutations_done);
-        assert_eq!(0, account.info.mutations_available);
-        assert!(account.increment_mutation_counter().is_err());
-        assert_eq!(DEFAULT_ACCOUNT_SIZE, account.info.mutations_done);
-        assert_eq!(0, account.info.mutations_available);
-    }
-
-    #[test]
-    fn version() {
-        let mut account = Account::default();
-        assert_eq!(account.version, 0);
-
-        unwrap!(account.increment_mutation_counter());
-        assert_eq!(account.version, 1);
-
-        unwrap!(account.decrement_mutation_counter());
-        assert_eq!(account.version, 2);
+        account.keys_ops_count = 2;
+        assert!(!account.has_balance());
     }
 }
