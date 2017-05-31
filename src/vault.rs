@@ -164,9 +164,12 @@ impl Vault {
             // ================== Refresh ==================
             (Authority::ClientManager(_),
              Authority::ClientManager(_),
-             Request::Refresh(serialised_msg, _)) => {
+             Request::Refresh(serialised_msg, msg_id)) |
+            (Authority::ManagedNode(_),
+             Authority::ClientManager(_),
+             Request::Refresh(serialised_msg, msg_id)) => {
                 self.maid_manager
-                    .handle_refresh(&mut self.routing_node, &serialised_msg)
+                    .handle_refresh(&mut self.routing_node, &serialised_msg, msg_id)
             }
             (Authority::ManagedNode(src_name),
              Authority::ManagedNode(_),

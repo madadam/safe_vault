@@ -23,7 +23,7 @@ use routing::{AccountInfo, ClientError, MAX_IMMUTABLE_DATA_SIZE_IN_BYTES,
               MAX_MUTABLE_DATA_ENTRIES, MAX_MUTABLE_DATA_SIZE_IN_BYTES, MutableData,
               TYPE_TAG_SESSION_PACKET, Value};
 use routing::mock_crust::{self, Network};
-use safe_vault::{DEFAULT_ACCOUNT_SIZE, GROUP_SIZE, test_utils};
+use safe_vault::{DEFAULT_MAX_OPS_COUNT, GROUP_SIZE, test_utils};
 use safe_vault::mock_crust_detail::{self, Data, poll, test_node};
 use safe_vault::mock_crust_detail::test_client::TestClient;
 use std::collections::BTreeSet;
@@ -79,7 +79,7 @@ fn handle_put_with_account() {
 
     client.create_account(&mut nodes);
     let mut expected_mutations_done = 1;
-    let mut expected_mutations_available = DEFAULT_ACCOUNT_SIZE - expected_mutations_done;
+    let mut expected_mutations_available = DEFAULT_MAX_OPS_COUNT - expected_mutations_done;
     let account_info = unwrap!(client.get_account_info_response(&mut nodes));
     assert_eq!(account_info.mutations_done, expected_mutations_done);
     assert_eq!(account_info.mutations_available,
@@ -106,7 +106,7 @@ fn handle_put_with_account() {
     mock_crust_detail::check_data(vec![Data::Immutable(data)], &nodes);
 
     expected_mutations_done += 1;
-    expected_mutations_available = DEFAULT_ACCOUNT_SIZE - expected_mutations_done;
+    expected_mutations_available = DEFAULT_MAX_OPS_COUNT - expected_mutations_done;
     let account_info = unwrap!(client.get_account_info_response(&mut nodes));
     assert_eq!(account_info.mutations_done, expected_mutations_done);
     assert_eq!(account_info.mutations_available,
@@ -210,7 +210,7 @@ fn create_account_twice() {
 
     let expected_account_info = AccountInfo {
         mutations_done: 1,
-        mutations_available: DEFAULT_ACCOUNT_SIZE - 1,
+        mutations_available: DEFAULT_MAX_OPS_COUNT - 1,
     };
 
     // Create the account using `client0`.
@@ -267,7 +267,7 @@ fn storing_till_client_account_full() {
     client.ensure_connected(&mut nodes);
     client.create_account(&mut nodes);
 
-    for i in 0..DEFAULT_ACCOUNT_SIZE + 5 {
+    for i in 0..DEFAULT_MAX_OPS_COUNT + 5 {
         let result = if i % 2 == 0 {
             let data = test_utils::gen_mutable_data(TEST_TAG, 0, client_key, &mut rng);
             client.put_mdata_response(data, &mut nodes)
@@ -276,7 +276,7 @@ fn storing_till_client_account_full() {
             client.put_idata_response(data, &mut nodes)
         };
 
-        if i < DEFAULT_ACCOUNT_SIZE - 1 {
+        if i < DEFAULT_MAX_OPS_COUNT - 1 {
             assert_eq!(result, Ok(()));
         } else {
             assert_eq!(result, Err(ClientError::LowBalance));
@@ -285,7 +285,7 @@ fn storing_till_client_account_full() {
 }
 
 #[test]
-fn account_mutation_count_increase_with_churn() {
+fn account_balance_with_successful_mutations_with_churn() {
     let seed = None;
     let iterations = test_utils::iterations();
     let node_count = 15;
@@ -306,13 +306,14 @@ fn account_mutation_count_increase_with_churn() {
     let mut event_count = 0;
 
     for i in 0..iterations {
+        trace!("Churning on {} nodes, iteration {}", nodes.len(), i);
+
+        trace!("Putting {} chunks", data_count);
         for _ in 0..data_count {
             let data = test_utils::gen_mutable_data(TEST_TAG, 10, client_key, &mut rng);
             let _ = client.put_mdata(data);
             mutation_count += 1;
         }
-
-        trace!("Churning on {} nodes, iteration {}", nodes.len(), i);
 
         if nodes.len() <= GROUP_SIZE + 2 || rng.gen() {
             let index = rng.gen_range(1, nodes.len());
@@ -333,12 +334,14 @@ fn account_mutation_count_increase_with_churn() {
         let sorted_nodes = test_node::closest_to(&nodes, client.name(), GROUP_SIZE);
         let node_count_stats: Vec<_> = sorted_nodes
             .into_iter()
-            .map(|node| (node.name(), node.get_maid_manager_mutation_count(client.name())))
+            .map(|node| {
+                     (node.name(), unwrap!(node.get_maid_manager_mutation_count(client.name())))
+                 })
             .collect();
 
         for &(_, count) in &node_count_stats {
             assert_eq!(count,
-                       Some(mutation_count),
+                       mutation_count,
                        "Expected {} mutations, got: {:?}",
                        mutation_count,
                        node_count_stats);
@@ -349,7 +352,7 @@ fn account_mutation_count_increase_with_churn() {
 }
 
 #[test]
-fn account_mutation_count_decrease_with_churn() {
+fn account_balance_with_failed_mutations_with_churn() {
     let seed = None;
     let node_count = 15;
     let chunks_per_iter = 4;
@@ -371,6 +374,22 @@ fn account_mutation_count_decrease_with_churn() {
     for i in 0..test_utils::iterations() as u64 {
         trace!("Churning on {} nodes, iteration {}", nodes.len(), i);
 
+        if i % 2 == 0 {
+            trace!("Putting {} chunks (expecting success)", chunks_per_iter);
+            data_list.clear();
+            for _ in 0..chunks_per_iter {
+                let data = test_utils::gen_mutable_data(TEST_TAG, 10, client_key, &mut rng);
+                let _ = client.put_mdata(data.clone());
+                data_list.push(data);
+            }
+        } else {
+            trace!("Putting {} chunks (expecting failure)", data_list.len());
+            for data in &data_list {
+                // Expect to be failed in DM. Account balance is not increased.
+                let _ = client.put_mdata(data.clone());
+            }
+        }
+
         if nodes.len() <= GROUP_SIZE + 2 || rng.gen() {
             let index = rng.gen_range(1, nodes.len());
             trace!("Adding node with bootstrap node {}.", index);
@@ -384,32 +403,24 @@ fn account_mutation_count_decrease_with_churn() {
             }
         }
 
-        if i % 2 == 0 {
-            data_list.clear();
-            for _ in 0..chunks_per_iter {
-                let data = test_utils::gen_mutable_data(TEST_TAG, 10, client_key, &mut rng);
-                let _ = client.put_mdata(data.clone());
-                data_list.push(data);
-            }
-        } else {
-            for data in &data_list {
-                // Expect to be failed in DM. MM acount is increased first but be decreased back
-                // due to the put failure response from DM.
-                let _ = client.put_mdata(data.clone());
-            }
-        }
-
         event_count += poll::nodes_and_client_with_resend(&mut nodes, &mut client);
         trace!("Processed {} events.", event_count);
 
         let sorted_nodes = test_node::closest_to(&nodes, client.name(), GROUP_SIZE);
         let node_count_stats: Vec<_> = sorted_nodes
             .into_iter()
-            .map(|node| (node.name(), node.get_maid_manager_mutation_count(client.name())))
+            .map(|node| {
+                     (node.name(), unwrap!(node.get_maid_manager_mutation_count(client.name())))
+                 })
             .collect();
 
+        let expected_mutation_count = chunks_per_iter * (i / 2 + 1) + 1;
         for &(_, count) in &node_count_stats {
-            assert_eq!(count, Some(chunks_per_iter * (i / 2 + 1) + 1));
+            assert_eq!(count,
+                       expected_mutation_count,
+                       "Unexpected mutation count: {:?}",
+                       node_count_stats);
+
         }
     }
 }
