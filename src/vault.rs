@@ -20,6 +20,7 @@ use cache::Cache;
 use chunk_store::Error as ChunkStoreError;
 use config_handler::{self, Config};
 use error::InternalError;
+use maidsafe_utilities::serialisation;
 #[cfg(all(test, feature = "use-mock-routing"))]
 pub use mock_routing::Node as RoutingNode;
 #[cfg(all(test, feature = "use-mock-routing"))]
@@ -164,13 +165,33 @@ impl Vault {
             // ================== Refresh ==================
             (Authority::ClientManager(_),
              Authority::ClientManager(_),
-             Request::Refresh(serialised_msg, _)) => {
+             Request::Refresh(serialised_msg, msg_id)) |
+            (Authority::ClientManager(_),
+             Authority::ManagedNode(_),
+             Request::Refresh(serialised_msg, msg_id)) => {
                 self.maid_manager
-                    .handle_refresh(&mut self.routing_node, &serialised_msg)
+                    .handle_serialised_refresh(&mut self.routing_node,
+                                               &serialised_msg,
+                                               msg_id,
+                                               None)
             }
             (Authority::ManagedNode(src_name),
              Authority::ManagedNode(_),
-             Request::Refresh(serialised_msg, _)) |
+             Request::Refresh(serialised_msg, msg_id)) => {
+                match serialisation::deserialise::<Refresh>(&serialised_msg)? {
+                    Refresh::MaidManager(serialised_refresh) => {
+                        self.maid_manager
+                            .handle_serialised_refresh(&mut self.routing_node,
+                                                       &serialised_refresh,
+                                                       msg_id,
+                                                       Some(src_name))
+                    }
+                    Refresh::DataManager(serialised_refresh) => {
+                        self.data_manager
+                            .handle_refresh(&mut self.routing_node, src_name, &serialised_refresh)
+                    }
+                }
+            }
             (Authority::ManagedNode(src_name),
              Authority::NaeManager(_),
              Request::Refresh(serialised_msg, _)) => {
@@ -689,7 +710,7 @@ impl Vault {
                     routing_table: RoutingTable<XorName>)
                     -> Result<(), InternalError> {
         self.maid_manager
-            .handle_node_lost(&mut self.routing_node, &node_lost)?;
+            .handle_node_lost(&mut self.routing_node, &node_lost, &routing_table)?;
         self.data_manager
             .handle_node_lost(&mut self.routing_node, &node_lost, &routing_table)?;
         Ok(())
@@ -759,4 +780,10 @@ enum EventResult {
     Terminate,
     // `RestartRequired` event received.
     Restart,
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+pub enum Refresh {
+    MaidManager(Vec<u8>),
+    DataManager(Vec<u8>),
 }

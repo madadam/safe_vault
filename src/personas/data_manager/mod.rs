@@ -10,6 +10,7 @@ pub use self::data::{Data, DataId, ImmutableDataId, MutableDataId};
 use self::mutable_data_cache::MutableDataCache;
 use self::mutation::{Mutation, MutationType};
 use GROUP_SIZE;
+use QUORUM;
 use accumulator::Accumulator;
 use chunk_store::{Chunk, ChunkId, ChunkStore};
 #[cfg(feature = "use-mock-crust")]
@@ -26,11 +27,10 @@ use std::path::PathBuf;
 use std::time::Duration;
 use tiny_keccak;
 use utils::{self, HashMap, HashSet, Instant};
+use vault::Refresh as VaultRefresh;
 use vault::RoutingNode;
 
 const MAX_FULL_PERCENT: u64 = 50;
-/// The quorum for accumulating refresh messages.
-const ACCUMULATOR_QUORUM: usize = GROUP_SIZE / 2 + 1;
 /// The timeout for accumulating refresh messages.
 const ACCUMULATOR_TIMEOUT_SECS: u64 = 180;
 /// The interval for print status log.
@@ -82,12 +82,11 @@ pub struct DataManager {
 impl DataManager {
     pub fn new(chunk_store_root: PathBuf, capacity: u64) -> Result<DataManager, InternalError> {
         let chunk_store = ChunkStore::new(chunk_store_root, capacity)?;
+        let accumulator_duration = Duration::from_secs(ACCUMULATOR_TIMEOUT_SECS);
 
         Ok(DataManager {
                chunk_store: chunk_store,
-               refresh_accumulator:
-                   Accumulator::with_duration(ACCUMULATOR_QUORUM,
-                                              Duration::from_secs(ACCUMULATOR_TIMEOUT_SECS)),
+               refresh_accumulator: Accumulator::with_duration(QUORUM, accumulator_duration),
                cache: Default::default(),
                mdata_cache: MutableDataCache::new(),
                immutable_data_count: 0,
@@ -1203,9 +1202,14 @@ impl DataManager {
         // FIXME - We need to handle >2MB chunks
         let src = Authority::ManagedNode(*routing_node.id()?.name());
         let serialised_refresh = serialisation::serialise(&refresh)?;
+        let payload = if dst.is_single() {
+            serialisation::serialise(&VaultRefresh::DataManager(serialised_refresh))?
+        } else {
+            serialised_refresh
+        };
         trace!("DM sending refresh to {:?}.", dst);
         routing_node
-            .send_refresh_request(src, dst, serialised_refresh, MessageId::new())?;
+            .send_refresh_request(src, dst, payload, MessageId::new())?;
         Ok(())
     }
 
@@ -1215,21 +1219,14 @@ impl DataManager {
                           refresh: MutationVote,
                           msg_id: MessageId)
                           -> Result<(), InternalError> {
-        match serialisation::serialise(&refresh) {
-            Ok(serialised_data) => {
-                trace!("DM sending refresh data to group {:?}.", name);
-                routing_node
-                    .send_refresh_request(Authority::NaeManager(name),
-                                          Authority::NaeManager(name),
-                                          serialised_data,
-                                          msg_id)?;
-                Ok(())
-            }
-            Err(error) => {
-                warn!("Failed to serialise data: {:?}", error);
-                Err(From::from(error))
-            }
-        }
+        let payload = serialisation::serialise(&refresh)?;
+        trace!("DM sending refresh data to group {:?}.", name);
+        routing_node
+            .send_refresh_request(Authority::NaeManager(name),
+                                  Authority::NaeManager(name),
+                                  payload,
+                                  msg_id)?;
+        Ok(())
     }
 
     fn request_needed_fragments(&mut self,

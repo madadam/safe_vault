@@ -816,11 +816,13 @@ fn mutable_data_concurrent_mutations() {
         let sorted_nodes = test_node::closest_to(&nodes, client.name(), GROUP_SIZE);
         let node_count_stats: Vec<_> = sorted_nodes
             .into_iter()
-            .map(|node| (node.name(), node.get_maid_manager_mutation_count(client.name())))
+            .map(|node| {
+                     (node.name(), unwrap!(node.get_maid_manager_mutation_count(client.name())))
+                 })
             .collect();
         expected_mutation_count += successes;
         for &(_, count) in &node_count_stats {
-            assert_eq!(Some(expected_mutation_count as u64),
+            assert_eq!(expected_mutation_count as u64,
                        count,
                        "Expected {} mutations got: {:?}",
                        expected_mutation_count,

@@ -16,13 +16,13 @@
 // relating to use of the SAFE Network Software.
 
 use super::*;
-use super::ACCUMULATOR_QUORUM as QUORUM;
 use maidsafe_utilities::serialisation::{deserialise, serialise};
 use mock_routing::RequestWrapper;
 use rand::{self, Rng};
 use routing::{Action, EntryActions, Request, Response, User};
 use std::env;
 use test_utils;
+use vault::Refresh as VaultRefresh;
 
 const CHUNK_STORE_CAPACITY: u64 = 1024;
 const CHUNK_STORE_DIR: &'static str = "test_safe_vault_chunk_store";
@@ -310,7 +310,9 @@ fn handle_node_added() {
     assert_eq!(message.dst, Authority::ManagedNode(new_node_name));
 
     let payload = assert_match!(message.request, Request::Refresh(payload, _) => payload);
-    let fragments: Vec<FragmentInfo> = unwrap!(deserialise(&payload));
+    let refresh: VaultRefresh = unwrap!(deserialise(&payload));
+    let refresh = assert_match!(refresh, VaultRefresh::DataManager(refresh) => refresh);
+    let fragments: Vec<FragmentInfo> = unwrap!(deserialise(&refresh));
 
     assert_eq!(fragments.len(), 2);
 
@@ -363,10 +365,7 @@ fn idata_with_churn() {
 
     // New node receives the refresh from at least QUORUM other nodes. The message
     // should now accumulate.
-    for name in old_node_names
-            .iter()
-            .skip(1)
-            .take(ACCUMULATOR_QUORUM - 1) {
+    for name in old_node_names.iter().skip(1).take(QUORUM - 1) {
         unwrap!(new_dm.handle_refresh(&mut new_node, *name, &refresh_payload));
     }
 
