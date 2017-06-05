@@ -264,5 +264,8 @@ pub use vault::Vault;
 /// The number of nodes in groups managing data and user accounts.
 pub const GROUP_SIZE: usize = 8;
 
+/// The number of nodes needed to achieve consensus.
+pub const QUORUM: usize = GROUP_SIZE / 2 + 1;
+
 /// The type tag of invitations to create an account.
 pub const TYPE_TAG_INVITE: u64 = 8;
