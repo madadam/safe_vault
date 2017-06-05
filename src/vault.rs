@@ -239,7 +239,7 @@ impl Vault {
              Authority::NaeManager(_),
              Request::GetMData { name, tag, msg_id }) |
             (Authority::ManagedNode(_),
-             Authority::ManagedNode(_),
+             Authority::NaeManager(_),
              Request::GetMData { name, tag, msg_id }) => {
                 self.data_manager
                     .handle_get_mdata(&mut self.routing_node, src, name, tag, msg_id)
